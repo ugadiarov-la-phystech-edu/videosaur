@@ -6,6 +6,8 @@ import torch
 import torchvision
 from torch import nn
 
+from videosaur.dinov2 import build_model_for_eval
+from videosaur.dinov2.configs import get_cfg_from_args
 from videosaur.modules import utils
 from videosaur.utils import config_as_kwargs, make_build_fn
 
@@ -95,22 +97,108 @@ class FrameEncoder(nn.Module):
             }
 
 
+class ViTExtractor(nn.Module):
+    """Feature extractor utilizing models ViT."""
+
+    # Convenience aliases for feature keys
+    FEATURE_ALIASES = {
+        **{f"resnet_block{i}": f"layer{i}" for i in range(1, 5)},
+        **{f"vit_block{i + 1}": f"blocks.{i}" for i in range(24)},
+        **{f"vit_block_values{i + 1}": f"blocks.{i}.attn.qkv" for i in range(24)},
+        **{f"vit_block_queries{i + 1}": f"blocks.{i}.attn.qkv" for i in range(24)},
+        **{f"vit_block_keys{i + 1}": f"blocks.{i}.attn.qkv" for i in range(24)},
+        "vit_output": "norm",
+    }
+    FEATURE_MAPPING = {
+        **{f"layer{i}": f"resnet_block{i}" for i in range(1, 5)},
+        **{f"blocks.{i}": f"vit_block{i + 1}" for i in range(24)},
+        **{f"blocks.{i}.attn.qkv": f"vit_block_keys{i + 1}" for i in range(24)},
+        "norm": "vit_output",
+    }
+
+    def __init__(
+        self,
+        config_path: str,
+        checkpoint_path: str,
+        frozen: bool = False,
+        n_last_layers_features=0,
+        attention_features=None,
+    ):
+        super().__init__()
+        self.config_path = config_path
+        self.frozen = frozen
+        self.n_last_layers_features = n_last_layers_features
+        self.attention_features = attention_features
+        self.features = []
+        self.is_vit = True
+
+        need_save_qkv_output_last_layers = 0 if self.n_last_layers_features == 0 or self.attention_features is None else self.n_last_layers_features
+        config = get_cfg_from_args(config_path)
+        model = build_model_for_eval(config, checkpoint_path=checkpoint_path,
+                                     need_save_qkv_output_last_layers=need_save_qkv_output_last_layers)
+        for i in range(model.n_blocks - self.n_last_layers_features, model.n_blocks):
+            self.features.append(f"vit_block{i + 1}")
+            if self.attention_features is not None:
+                self.features.append(f"vit_block_{self.attention_features}{i + 1}")
+
+        self.model = model
+
+        if self.frozen:
+            self.requires_grad_(False)
+
+    def forward(self, inp):
+        if self.frozen:
+            with torch.no_grad():
+                outputs = self.model.get_intermediate_layers(x=inp, n=self.n_last_layers_features,
+                                                             return_class_token=False, norm=False)
+        else:
+            outputs = self.model.get_intermediate_layers(x=inp, n=self.n_last_layers_features, return_class_token=False,
+                                                         norm=False)
+
+        if self.features is not None and len(self.features) > 0:
+            outputs = {self.FEATURE_MAPPING[key]: value for key, value in outputs[0].items()}
+            for name in self.features:
+                if ("keys" in name) or ("queries" in name) or ("values" in name):
+                    feature_name = name.replace("queries", "keys").replace("values", "keys")
+                    B, N, C = outputs[feature_name].shape
+                    qkv = outputs[feature_name].reshape(
+                        B, N, 3, C // 3
+                    )  # outp has shape B, N, 3 * H * (C // H)
+                    q, k, v = qkv.unbind(2)
+                    if "keys" in name:
+                        outputs[name] = k
+                    elif "queries" in name:
+                        outputs[name] = q
+                    elif "values" in name:
+                        outputs[name] = v
+                    else:
+                        raise ValueError(f"Unknown feature name {name}.")
+
+            if len(outputs) == 1:
+                # Unpack single output for now
+                return next(iter(outputs.values()))
+            else:
+                return outputs
+        else:
+            return outputs
+
+
 class TimmExtractor(nn.Module):
     """Feature extractor utilizing models from timm library."""
 
     # Convenience aliases for feature keys
     FEATURE_ALIASES = {
         **{f"resnet_block{i}": f"layer{i}" for i in range(1, 5)},
-        **{f"vit_block{i + 1}": f"blocks.{i}" for i in range(12)},
-        **{f"vit_block_values{i + 1}": f"blocks.{i}.attn.qkv" for i in range(12)},
-        **{f"vit_block_queries{i + 1}": f"blocks.{i}.attn.qkv" for i in range(12)},
-        **{f"vit_block_keys{i + 1}": f"blocks.{i}.attn.qkv" for i in range(12)},
+        **{f"vit_block{i + 1}": f"blocks.{i}" for i in range(24)},
+        **{f"vit_block_values{i + 1}": f"blocks.{i}.attn.qkv" for i in range(24)},
+        **{f"vit_block_queries{i + 1}": f"blocks.{i}.attn.qkv" for i in range(24)},
+        **{f"vit_block_keys{i + 1}": f"blocks.{i}.attn.qkv" for i in range(24)},
         "vit_output": "norm",
     }
     FEATURE_MAPPING = {
         **{f"layer{i}": f"resnet_block{i}" for i in range(1, 5)},
-        **{f"blocks.{i}": f"vit_block{i + 1}" for i in range(12)},
-        **{f"blocks.{i}.attn.qkv": f"vit_block_keys{i + 1}" for i in range(12)},
+        **{f"blocks.{i}": f"vit_block{i + 1}" for i in range(24)},
+        **{f"blocks.{i}.attn.qkv": f"vit_block_keys{i + 1}" for i in range(24)},
         "norm": "vit_output",
     }
 
