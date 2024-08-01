@@ -98,6 +98,13 @@ model:
     hidden_dims: [2048, 2048, 2048]
     n_patches: ${globals.NUM_PATCHES}
 
+wandb:
+  entity: null
+  project: Test project
+  group: test-group
+  run_name: run-0
+  run_id: null
+
 #val_metrics:
 #  image_ari:
 #    name: ImageARI

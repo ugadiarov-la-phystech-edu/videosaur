@@ -8,6 +8,7 @@ from typing import Any, Dict, Optional
 
 import pytorch_lightning as pl
 import torch
+import wandb
 from omegaconf import OmegaConf
 from pytorch_lightning.utilities import rank_zero_info as log_info
 
@@ -234,6 +235,22 @@ def main(args, config_overrides=None):
         val_metrics = {name: metrics.build(config) for name, config in config.val_metrics.items()}
     else:
         val_metrics = None
+
+    run = None
+    if config.wandb is not None:
+        run_name = config.wandb.run_name
+        if run_name is None:
+            run_name = f'run-{config.seed}'
+
+        run = wandb.init(
+            entity=config.wandb.entity,
+            project=config.wandb.project,
+            group=config.wandb.group,
+            name=run_name,
+            id=config.wandb.run_id,
+            resume='never' if config.wandb.run_id is None else 'must',
+            sync_tensorboard=True,
+        )
 
     model = models.build(config.model, config.optimizer, train_metrics, val_metrics)
 
