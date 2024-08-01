@@ -151,6 +151,7 @@ def _setup_trainer_config(trainer_config: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def main(args, config_overrides=None):
+    torch.set_float32_matmul_precision('medium')
     rank_zero = utils.get_rank() == 0
     if config_overrides is None:
         config_overrides = args.config_overrides
