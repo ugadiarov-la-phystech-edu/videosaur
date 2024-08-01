@@ -129,6 +129,7 @@ def build(
         target_encoder_input=model_config.get("target_encoder_input", None),
         visualize=model_config.get("visualize", False),
         visualize_every_n_steps=model_config.get("visualize_every_n_steps", 1000),
+        visualize_segmentations=model_config.get("visualize_segmentations", True),
         masks_to_visualize=masks_to_visualize,
     )
 
@@ -158,6 +159,7 @@ class ObjectCentricModel(pl.LightningModule):
         visualize: bool = False,
         visualize_every_n_steps: Optional[int] = None,
         masks_to_visualize: Union[str, List[str]] = "decoder",
+        visualize_segmentations: bool = True,
     ):
         super().__init__()
         self.optimizer_builder = optimizer_builder
@@ -200,6 +202,7 @@ class ObjectCentricModel(pl.LightningModule):
             if key not in ("decoder", "grouping"):
                 raise ValueError(f"Unknown mask type {key}. Should be `decoder` or `grouping`.")
         self.mask_keys_to_visualize = [f"{key}_masks" for key in masks_to_visualize]
+        self.visualize_segmentations = visualize_segmentations
 
         if input_type == "image":
             self.input_key = "image"
@@ -395,12 +398,13 @@ class ObjectCentricModel(pl.LightningModule):
             masks_to_vis = {
                 key: aux_outputs[f"{key}_vis_hard"] for key in self.mask_keys_to_visualize
             }
-            if batch["segmentations"].shape[-2:] != batch[self.input_key].shape[-2:]:
-                masks_to_vis["segmentations"] = self.mask_resizers["segmentation"](
-                    batch["segmentations"], batch[self.input_key]
-                )
-            else:
-                masks_to_vis["segmentations"] = batch["segmentations"]
+            if self.visualize_segmentations:
+                if batch["segmentations"].shape[-2:] != batch[self.input_key].shape[-2:]:
+                    masks_to_vis["segmentations"] = self.mask_resizers["segmentation"](
+                        batch["segmentations"], batch[self.input_key]
+                    )
+                else:
+                    masks_to_vis["segmentations"] = batch["segmentations"]
             self._log_inputs(
                 batch[self.input_key],
                 masks_to_vis,

@@ -26,6 +26,7 @@ class ModelConfig:
     visualize: bool = False
     eval_mode_config: Optional[Dict[str, Any]] = None
     visualize_every_n_steps: Optional[int] = 1000
+    visualize_segmentations: bool = True
     masks_to_visualize: Optional[List[str]] = None
     load_weights: Optional[str] = None
     modules_to_load: Optional[Dict[str, str]] = None
