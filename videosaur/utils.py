@@ -248,4 +248,6 @@ class CheckValidationCallback(pl.callbacks.Callback):
 
 def find_last_checkpoint(log_path: pathlib.Path) -> pathlib.Path:
     checkpoints = log_path.glob("**/*.ckpt")
-    return max(checkpoints, default=None, key=os.path.getctime)
+    resume_from = max(checkpoints, default=None, key=os.path.getctime)
+    print(f'Resume training from checkpoint: {resume_from}')
+    return resume_from
