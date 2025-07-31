@@ -48,6 +48,7 @@ class Config:
     experiment_group: Optional[str] = None
     seed: Optional[int] = None
     checkpoint_every_n_steps: int = 1000
+    monitor: Optional[str] = None
 
 
 def load_config(path: pathlib.Path, overrides: Optional[List[str]] = None) -> OmegaConf:

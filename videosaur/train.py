@@ -62,10 +62,18 @@ def _setup_callbacks(args, config, log_path: pathlib.Path, dataset=None) -> Dict
 
     if not args.dry:
         # Explicitly construct model checkpoint to have control over checkpoints directory
+        if config.monitor is None:
+            monitor = None
+            every_n_train_steps = config.checkpoint_every_n_steps
+        else:
+            monitor = config.monitor
+            every_n_train_steps = None
+
         checkpointer = pl.callbacks.ModelCheckpoint(
             log_path / CHECKPOINT_SUBDIR,
+            monitor=monitor,
             filename="{step}",
-            every_n_train_steps=config.checkpoint_every_n_steps,
+            every_n_train_steps=every_n_train_steps,
             verbose=args.verbose,
         )
         callbacks["checkpointer"] = checkpointer
