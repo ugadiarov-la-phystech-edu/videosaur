@@ -551,6 +551,12 @@ class ObjectCentricModel(pl.LightningModule):
                 f"{name}/images", make_grid(data, nrow=n_examples), global_step=global_step
             )
 
+        comet_logger = self._get_comet_logger()
+        if comet_logger is not None:
+            comet_logger.experiment.log_image(name=f"{name}/images",
+                                              image_data=make_grid(data, nrow=n_examples).detach().cpu().movedim(0, -1).numpy(),
+                                              step=global_step)
+
     @staticmethod
     def _remove_padding(
         batch: Dict[str, Any], padding_mask: torch.Tensor
@@ -570,6 +576,15 @@ class ObjectCentricModel(pl.LightningModule):
                 output[key] = [value[idx] for idx in mask_as_idxs]
 
         return output
+
+    def _get_comet_logger(self):
+        if self.loggers is not None:
+            for logger in self.loggers:
+                if isinstance(logger, pl.loggers.CometLogger):
+                    return logger
+        else:
+            if isinstance(self.logger, pl.loggers.CometLogger):
+                return self.logger
 
     def _get_tensorboard_logger(self):
         if self.loggers is not None:

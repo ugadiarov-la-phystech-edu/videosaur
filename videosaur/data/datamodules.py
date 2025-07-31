@@ -9,9 +9,11 @@ import pytorch_lightning as pl
 import torch
 import webdataset as wds
 from omegaconf import ListConfig
+from torch.utils.data import DataLoader
 from torch.utils.data._utils import collate as torch_collate
 
 from videosaur.data import pipelines, transforms
+from videosaur.data.datasets import EpisodesDataset
 from videosaur.data.utils import get_data_root_dir, worker_init_function
 from videosaur.utils import config_as_kwargs
 
@@ -44,6 +46,16 @@ def build(config, name: Optional[str] = "WebdatasetDataModule", data_dir: Option
                     "val_transforms",
                 ),
             ),
+        )
+    elif name == "EpisodeDataModule":
+        return EpisodeDataModule(
+            data_dir=data_dir,
+            input_size=config.input_size,
+            batch_size=config.batch_size,
+            num_workers=config.num_workers,
+            extension=config.extension,
+            kind=config.kind,
+            sequence_length=config.sequence_length,
         )
     else:
         raise ValueError(f"Unknown dataset module `{name}`")
@@ -609,3 +621,38 @@ class DummyDataModule(pl.LightningDataModule):
 
     def val_dataloader(self):
         return torch.utils.data.DataLoader(self.val_set, batch_size=self.batch_size, shuffle=False)
+
+
+class EpisodeDataModule(pl.LightningDataModule):
+    def __init__(self, data_dir, input_size, batch_size, num_workers: int = 0, extension: str = 'png',
+                 kind: str = 'image', sequence_length: int = 1):
+        super().__init__()
+        self.data_dir = data_dir
+        self.input_size = input_size
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+        self.extension = extension
+        self.kind = kind
+        self.sequence_length = sequence_length
+
+    def prepare_data(self):
+        pass
+
+    def setup(self, stage: Optional[str] = None):
+        if stage == "fit" or stage is None:
+            self.train = EpisodesDataset(self.data_dir, mode='train', res=self.input_size, extension=self.extension,
+                                         return_tensor=True, kind=self.kind, sequence_length=self.sequence_length)
+            self.validate = EpisodesDataset(self.data_dir, mode='val', res=self.input_size, extension=self.extension,
+                                            return_tensor=True, kind=self.kind, sequence_length=self.sequence_length)
+        if stage == "test" or stage is None:
+            self.test = EpisodesDataset(self.data_dir, mode='train', res=self.input_size, extension=self.extension,
+                                        return_tensor=True, kind=self.kind, sequence_length=self.sequence_length)
+
+    def train_dataloader(self):
+        return DataLoader(self.train, batch_size=self.batch_size, num_workers=self.num_workers)
+
+    def val_dataloader(self):
+        return DataLoader(self.validate, batch_size=self.batch_size, num_workers=self.num_workers)
+
+    def test_dataloader(self):
+        return DataLoader(self.test, batch_size=self.batch_size, num_workers=self.num_workers)

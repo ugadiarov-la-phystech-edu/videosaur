@@ -1,0 +1,128 @@
+experiment_group: test
+experiment_name: test_dummy_video
+
+globals:
+  NUM_SLOTS: 4
+  SLOT_DIM: 16
+  VIT_MODEL: vit_small_patch16_224
+  FEAT_DIM: 384
+  NUM_PATCHES: 196
+  SIM_TEMP: 0.075
+  SIM_WEIGHT: 0.1
+
+dataset:
+  name: DummyDataModule
+  train_size: 20
+  val_size: 5
+  batch_size: 2
+  train_transforms:
+    name: dummy_train
+    type: video
+    input_size: 224
+    num_classes: 4
+  val_transforms:
+    name: dummy_val
+    type: video
+    input_size: 224
+    num_classes: 4
+  shapes:
+    video: [3, 224, 224, 3]
+    masks: [3, 224, 224, 1]
+    segmentations: [3, 4, 224, 224]
+
+trainer:
+  max_steps: 100
+  val_check_interval: 2
+
+optimizer:
+  name: Adam
+  lr: 3e-4
+
+model:
+  input_type: video
+  visualize: true
+  visualize_every_n_steps: 10000
+  losses:
+    loss_timesim:
+      name: CrossEntropyLoss
+      target_key: encoder.vit_block_keys12
+      remove_last_n_frames: 1
+      pred_dims:
+        - 0
+        - ${globals.NUM_PATCHES}
+      target_transform:
+        name: utils.FeatureTimeSimilarity
+        softmax: true
+        temperature: ${globals.SIM_TEMP}
+        threshold: 0.0
+  loss_weights:
+    loss_timesim: ${globals.SIM_WEIGHT}
+
+  initializer:
+    name: RandomInit
+    n_slots: ${globals.NUM_SLOTS}
+    dim: ${globals.SLOT_DIM}
+
+  encoder:
+    backbone:
+      name: TimmExtractor
+      model: ${globals.VIT_MODEL}
+      features:
+      - vit_block12
+      - vit_block_keys12
+      frozen: true
+      pretrained: true
+    output_transform:
+      name: networks.two_layer_mlp
+      inp_dim: ${globals.FEAT_DIM}
+      outp_dim: ${globals.SLOT_DIM}
+      hidden_dim: "${mul: ${globals.FEAT_DIM}, 2}"
+      layer_norm: true
+
+  grouper:
+    name: SlotAttention
+    inp_dim: ${globals.SLOT_DIM}
+    slot_dim: ${globals.SLOT_DIM}
+    n_iters: 2
+    use_mlp: false
+
+  latent_processor:
+    first_step_corrector_args:
+      n_iters: 3
+
+  decoder:
+    name: SlotMixerDecoder
+    inp_dim: ${globals.SLOT_DIM}
+    embed_dim: ${globals.SLOT_DIM}
+    outp_dim:  ${globals.NUM_PATCHES}
+    n_patches: ${globals.NUM_PATCHES}
+    allocator:
+      name: TransformerEncoder
+      dim: ${globals.SLOT_DIM}
+      memory_dim: ${globals.SLOT_DIM}
+      n_blocks: 2
+      n_heads: 4
+    renderer:
+      name: MLP
+      inp_dim: ${globals.SLOT_DIM}
+      outp_dim: 1024
+      hidden_dims: [1024, 1024, 1024]
+      final_activation: true
+    renderer_dim: 1024
+    use_layer_norms: true
+    pos_embed_mode: add
+
+  predictor:
+    name: networks.TransformerEncoder
+    dim: ${globals.SLOT_DIM}
+    n_blocks: 1
+    n_heads: 4
+
+val_metrics:
+  ari:
+    name: VideoARI
+    ignore_background: true
+    pred_key: decoder_masks_hard
+    true_key: masks
+
+wandb: null

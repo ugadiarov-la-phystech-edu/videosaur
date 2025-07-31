@@ -37,7 +37,8 @@ class Config:
     optimizer: ModuleConfig = MISSING
     model: ModelConfig = MISSING
     dataset: ModuleConfig = MISSING
-    wandb: ModuleConfig = MISSING
+    wandb: Optional[ModuleConfig] = None
+    comet: Optional[ModuleConfig] = None
     trainer: Optional[ModuleConfig] = field(default_factory=lambda: {})
     train_metrics: Optional[Dict[str, ModuleConfig]] = None
     val_metrics: Optional[Dict[str, ModuleConfig]] = None
