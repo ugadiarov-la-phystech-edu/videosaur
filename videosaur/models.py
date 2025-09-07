@@ -454,7 +454,20 @@ class ObjectCentricModel(pl.LightningModule):
         elif self.input_key == "image":
             image = denorm(inputs)
             self._log_images(f"{mode}/{self.input_key}", image, global_step=step)
+            # image = image.unsqueeze(-4)
             for mask_name, masks in masks_by_name.items():
+                # masks = masks.unsqueeze(-3)
+                # attention_hard = image * masks + (1 - masks)
+                # image_with_attention_hard = torch.cat([image, attention_hard], dim=1)
+                # nrow = image_with_attention_hard.shape[1]
+                # import torchvision
+                # from torchvision.utils import make_grid
+                #
+                # for i in range(image_with_attention_hard.shape[0]):
+                #     log_image = make_grid(image_with_attention_hard[i], nrow=nrow, pad_value=0.0)
+                #     log_image = torchvision.transforms.functional.to_pil_image(log_image)
+                #     log_image.save(f'/tmp/log_images/{i:04d}.png')
+
                 image_with_masks = visualizations.mix_images_with_masks(image, masks)
                 self._log_images(
                     f"{mode}/image_with_{mask_name}",
