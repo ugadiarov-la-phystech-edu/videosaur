@@ -83,3 +83,4 @@ dataset:
   extension: JPEG
   kind: image
   sequence_length: 1
+  augmentation_probability: 0.0

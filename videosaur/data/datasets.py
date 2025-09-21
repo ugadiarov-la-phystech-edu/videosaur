@@ -1,6 +1,7 @@
 import time
 
 import numpy as np
+import skimage
 from torch.utils.data import Dataset
 import glob
 import os
@@ -15,7 +16,8 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
 class EpisodesDataset(Dataset):
-    def __init__(self, root, mode, res=128, extension='png', return_tensor=True, kind='image', sequence_length=1):
+    def __init__(self, root, mode, res=128, extension='png', return_tensor=True, kind='image', sequence_length=1,
+                 augmentation_probability=0., ):
         assert mode in ['train', 'val', 'valid', 'test']
         if mode in ('valid', 'test'):
             mode = 'val'
@@ -38,9 +40,21 @@ class EpisodesDataset(Dataset):
         self.mode = mode
         self.extension = extension
         self.return_tensor = return_tensor
-        self.to_tensor = transforms.Compose(
+        self.transforms = transforms.Compose(
             [
                 transforms.ToTensor(),
+                transforms.Resize(size=self.res),
+                Normalize(
+                    dataset_type='image', mean=IMAGENET_DEFAULT_MEAN, std=IMAGENET_DEFAULT_STD
+                ),
+            ]
+        )
+        self.augmentation_probability = augmentation_probability
+        self.augmentation_transforms = transforms.Compose(
+            [
+                transforms.ToTensor(),
+                transforms.RandomResizedCrop(size=self.res, scale=(0.4, 1.), ratio=(1, 1)),
+                transforms.RandomHorizontalFlip(),
                 Normalize(
                     dataset_type='image', mean=IMAGENET_DEFAULT_MEAN, std=IMAGENET_DEFAULT_STD
                 ),
@@ -90,7 +104,7 @@ class EpisodesDataset(Dataset):
                 image_sequence.append(img)
 
             if self.return_tensor:
-                image_sequence = torch.stack([self.to_tensor(img) for img in image_sequence], dim=0)
+                image_sequence = torch.stack([self.transforms(img) for img in image_sequence], dim=0)
 
             return {self.kind: image_sequence}
         elif self.kind == 'image':
@@ -98,11 +112,18 @@ class EpisodesDataset(Dataset):
             # Implement continuous indexing
             offset = self.episode2offset[ep]
             in_episode_index = index - offset
-            img = Image.open(self.episode_images[ep][in_episode_index])
-            img = img.resize((self.res, self.res))
+            if np.random.random() < self.augmentation_probability:
+                img = skimage.io.imread(self.episode_images[ep][in_episode_index])
+                center = (np.random.random() * img.shape[1], np.random.random() * img.shape[0])
+                img = skimage.transform.rotate(img, angle=np.random.random() * 360, mode='reflect', center=center)
+                img = skimage.util.img_as_ubyte(img)
+                img = self.augmentation_transforms(img)
+            else:
+                img = Image.open(self.episode_images[ep][in_episode_index])
+                img = self.transforms(img)
 
-            if self.return_tensor:
-                img = self.to_tensor(img)
+            if not self.return_tensor:
+                img = img.numpy()
 
             return {self.kind: img}
         else:

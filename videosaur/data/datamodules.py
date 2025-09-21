@@ -56,6 +56,7 @@ def build(config, name: Optional[str] = "WebdatasetDataModule", data_dir: Option
             extension=config.extension,
             kind=config.kind,
             sequence_length=config.sequence_length,
+            augmentation_probability=config.augmentation_probability,
         )
     else:
         raise ValueError(f"Unknown dataset module `{name}`")
@@ -625,7 +626,7 @@ class DummyDataModule(pl.LightningDataModule):
 
 class EpisodeDataModule(pl.LightningDataModule):
     def __init__(self, data_dir, input_size, batch_size, num_workers: int = 0, extension: str = 'png',
-                 kind: str = 'image', sequence_length: int = 1):
+                 kind: str = 'image', sequence_length: int = 1, augmentation_probability=0.):
         super().__init__()
         self.data_dir = data_dir
         self.input_size = input_size
@@ -634,6 +635,7 @@ class EpisodeDataModule(pl.LightningDataModule):
         self.extension = extension
         self.kind = kind
         self.sequence_length = sequence_length
+        self.augmentation_probability = augmentation_probability
 
     def prepare_data(self):
         pass
@@ -641,11 +643,12 @@ class EpisodeDataModule(pl.LightningDataModule):
     def setup(self, stage: Optional[str] = None):
         if stage == "fit" or stage is None:
             self.train = EpisodesDataset(self.data_dir, mode='train', res=self.input_size, extension=self.extension,
-                                         return_tensor=True, kind=self.kind, sequence_length=self.sequence_length)
+                                         return_tensor=True, kind=self.kind, sequence_length=self.sequence_length,
+                                         augmentation_probability=self.augmentation_probability)
             self.validate = EpisodesDataset(self.data_dir, mode='val', res=self.input_size, extension=self.extension,
                                             return_tensor=True, kind=self.kind, sequence_length=self.sequence_length)
         if stage == "test" or stage is None:
-            self.test = EpisodesDataset(self.data_dir, mode='train', res=self.input_size, extension=self.extension,
+            self.test = EpisodesDataset(self.data_dir, mode='val', res=self.input_size, extension=self.extension,
                                         return_tensor=True, kind=self.kind, sequence_length=self.sequence_length)
 
     def train_dataloader(self):
